@@ -1,4 +1,5 @@
 import asyncio
+import pprint
 from bleak import BleakScanner, BleakClient
 
 async def main():
