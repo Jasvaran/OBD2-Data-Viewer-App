@@ -1,50 +1,45 @@
-from bleson import get_provider, Peripheral
-from bleson.core.hci.type_codes import GATT_SUCCESS
+import asyncio
+from bluez_peripheral.gatt.service import Service
+from bluez_peripheral.gatt.characteristic import characteristic, CharacteristicFlags
+from bluez_peripheral.util import get_message_bus
+from bluez_peripheral.advert import Advertisement
+from bluez_peripheral.util import Adapter
 
-# Characteristic UUIDs
-TX_UUID = "0000fff1-0000-1000-8000-00805f9b34fb"  # writable from client
-RX_UUID = "0000fff2-0000-1000-8000-00805f9b34fb"  # notify to client
+SERVICE_UUID = "12345678-1234-5678-1234-56789abcdef0"
+TX_UUID = "12345678-1234-5678-1234-56789abcdef1"
+RX_UUID = "12345678-1234-5678-1234-56789abcdef2"
 
-class FakeOBDPeripheral(Peripheral):
-    def __init__(self, provider):
-        super().__init__(provider)
+class FakeOBDService(Service):
+    def __init__(self):
+        super().__init__(SERVICE_UUID)
 
-        # Writable characteristic where client sends commands
-        self.add_writable_characteristic(uuid=TX_UUID, on_write=self.on_write)
+    @characteristic(TX_UUID, CharacteristicFlags.WRITE)
+    def tx(self, value, options):
+        cmd = bytes(value).decode().strip()
+        print("[SIM] Received:", cmd)
 
-        # Notifying characteristic where simulator sends back responses
-        self.add_notifying_characteristic(uuid=RX_UUID)
-
-        print("Fake OBD-II BLE Simulator Ready.")
-
-    def on_write(self, characteristic, value, offset):
-        # Decode command sent by client
-        cmd = value.decode(errors='ignore').strip()
-        print(f"[SIM] Received: {cmd}")
-
-        # Respond like a real OBD-II adapter
         if cmd == "ATZ":
-            self.notify(RX_UUID, b"ELM327 v2.1\r>")
-        elif cmd == "0105":
-            # Example coolant temp response: 83°C -> 0x7B
-            self.notify(RX_UUID, b"41 05 7B\r>")
-        else:
-            self.notify(RX_UUID, b"OK\r>")
+            return b"ELM327 v2.1\r>"
+        if cmd == "0105":
+            return b"41 05 7B\r>"
+        return b"OK\r>"
 
-        return GATT_SUCCESS
+    @characteristic(RX_UUID, CharacteristicFlags.NOTIFY)
+    def rx(self, options):
+        return b""
 
-def run():
-    provider = get_provider()              # Get Linux BLE backend
-    sim = FakeOBDPeripheral(provider)      # Create simulator object
-    sim.start()                             # Start BLE advertising
-    print("[SIM] Running. Press Ctrl+C to stop.")
+async def run():
+    bus = await get_message_bus()
+    service = FakeOBDService()
+    await service.register(bus)
 
-    try:
-        while True:
-            pass  # Keep simulator alive
-    except KeyboardInterrupt:
-        sim.stop()
-        print("[SIM] Stopped.")
+    adapter = await Adapter.get_first(bus)
+    advert = Advertisement("FakeOBD-II", [SERVICE_UUID], 0x0340, 60)
+    await advert.register(bus, adapter)
+
+    print("[SIM] BLE Simulator running...")
+    while True:
+        await asyncio.sleep(1)
 
 if __name__ == "__main__":
-    run()
+    asyncio.run(run())
