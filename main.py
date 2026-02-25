@@ -13,11 +13,6 @@ async def main():
 
     for i, d in enumerate(devices):
         device_dict[i] = devices[d][1].local_name
-    #     if devices[d][1].local_name == 'IOS-Vlink':
-    #         print("Found Vlink OBD2!")
-    #         my_device = d
-    #         print(my_device)
-    #         break
     
     pprint.pprint(device_dict)
     
@@ -33,9 +28,6 @@ async def main():
     except ValueError:
         print("Invalid input. Please enter a number. Exiting.")
         return
-    # if not my_device:
-    #     print("Could not find Vlink OBD2")
-    #     return
     
     address = my_device
     print(address)
