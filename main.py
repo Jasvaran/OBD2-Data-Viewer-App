@@ -3,7 +3,7 @@ import pprint
 from bleak import BleakScanner, BleakClient
 from obd2_simulator import MockBleakClient
 from intialization_commands import init_commands
-
+from pid_decoder import decode_response
 async def main():
 
     simulation_on = True
@@ -60,7 +60,15 @@ async def main():
 
         # Notification handler function
         def notificaion_handler(sender, data):
-            print(f"Notification from {sender}: {data.decode(errors='ignore')}")
+            # print(f"Notification from {sender}: {data.decode(errors='ignore')}")
+            text = data.decode(errors="ignore").strip()
+            if text == ">": # ELM327 prompt, 
+                return
+            result = decode_response(text)
+            if result:
+                print(f"Decoded response: {result}")
+            else:
+                print(f"Received unrecognized response: \nRaw Response: {text}")
         
         # start notifications
         await client.start_notify(RX_UUID, notificaion_handler)
@@ -71,7 +79,7 @@ async def main():
             await client.write_gatt_char(TX_UUID, cmd.encode())
             await asyncio.sleep(delay)  # wait for response 
 
-
+    
         # wait for response
         await asyncio.sleep(delay)
         print("Sending OBD2 command to read coolant temperature...")
