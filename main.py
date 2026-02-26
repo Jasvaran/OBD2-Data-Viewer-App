@@ -3,7 +3,8 @@ import pprint
 from bleak import BleakScanner, BleakClient
 from obd2_simulator import MockBleakClient
 from intialization_commands import init_commands
-from pid_decoder import decode_response
+from PID_Resources import decode_response
+from PID_Resources import PID_LIST
 async def main():
 
     simulation_on = True
@@ -66,7 +67,7 @@ async def main():
                 return
             result = decode_response(text)
             if result:
-                print(f"Decoded response: {result}")
+                print(f"{result['pid']:<6} | {result['name']:<28} | {result['value']} {result['unit']}")
             else:
                 print(f"Received unrecognized response: \nRaw Response: {text}")
         
@@ -78,14 +79,15 @@ async def main():
             print(f"Sending initialization command: {cmd.strip()}")
             await client.write_gatt_char(TX_UUID, cmd.encode())
             await asyncio.sleep(delay)  # wait for response 
-
-    
-        # wait for response
-        await asyncio.sleep(delay)
-        print("Sending OBD2 command to read coolant temperature...")
-        await client.write_gatt_char(TX_UUID, "0105\r".encode())
         
-        await asyncio.sleep(delay)
+        print("\n")
+        print(f"{'PID':<6} | {'Name':<28} | {'Value':<10}")
+        print("-" * 50)
+        for pid_cmd in PID_LIST:
+            # print(f"Requesting PID: {pid_cmd}")
+            await client.write_gatt_char(TX_UUID, (pid_cmd + "\r").encode())
+            await asyncio.sleep(delay)  # wait for response
+
         # stop notifications
         await client.stop_notify(RX_UUID)
 
