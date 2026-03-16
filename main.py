@@ -5,6 +5,9 @@ from obd2_simulator import MockBleakClient
 from intialization_commands import init_commands
 from PID_Resources import decode_response
 from PID_Resources import PID_LIST
+from dashboard import dashboard_dataDict
+from rich.live import Live
+from dashboard import build_table
 async def main():
 
     simulation_on = True
@@ -66,8 +69,12 @@ async def main():
             if text == ">": # ELM327 prompt, 
                 return
             result = decode_response(text)
-            if result:
-                print(f"{result['pid']:<6} | {result['name']:<28} | {result['value']} {result['unit']}")
+
+            
+
+
+            if result is not None:
+                dashboard_dataDict[result['pid']] = result
             else:
                 print(f"Received unrecognized response: \nRaw Response: {text}")
         
@@ -80,16 +87,23 @@ async def main():
             await client.write_gatt_char(TX_UUID, cmd.encode())
             await asyncio.sleep(delay)  # wait for response 
         
-        print("\n")
-        print(f"{'PID':<6} | {'Name':<28} | {'Value':<10}")
-        print("-" * 50)
-        for pid_cmd in PID_LIST:
-            # print(f"Requesting PID: {pid_cmd}")
-            await client.write_gatt_char(TX_UUID, (pid_cmd + "\r").encode())
-            await asyncio.sleep(delay)  # wait for response
 
-        # stop notifications
-        await client.stop_notify(RX_UUID)
+        try:
+            with Live(build_table(dashboard_dataDict), refresh_per_second=1) as live:
+                try:                
+                    while True:
+                        for pid_cmd in PID_LIST:
+                            # print(f"Requesting PID: {pid_cmd}")
+                            await client.write_gatt_char(TX_UUID, (pid_cmd + "\r").encode())
+                            await asyncio.sleep(delay)  # wait for response
+                            live.update(build_table(dashboard_dataDict))
+                        await asyncio.sleep(0.3)
+                except KeyboardInterrupt:
+                    pass
+        finally:
+
+                # stop notifications
+            await client.stop_notify(RX_UUID)
 
         
 
