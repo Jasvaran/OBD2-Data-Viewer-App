@@ -8,5 +8,4 @@ PID_LIST = [
     "0111",  # Throttle Position
     "012F",  # Fuel Tank Level
     "0146",  # Ambient Air Temperature
-    "0151",  # Fuel Type
 ]

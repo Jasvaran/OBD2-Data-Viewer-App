@@ -1,3 +1,5 @@
+import re
+
 PID_DEFINITIONS = {
     "05": {
         "name": "Coolant Temperature",
@@ -62,19 +64,30 @@ def decode_response(response:str) -> dict | None:
     Returns None if the response can't be parsed.
     """
 
-    #Must start with "41" (Mode 1 response)
-    parts = response.strip().split()
+    cleaned = response.strip().upper()
+    match = re.search(r"\b41\s+[0-9A-F]{2}(?:\s+[0-9A-F]{2}){1,4}\b", cleaned)
+    if match:
+        cleaned = match.group(0)
+
+    # Must start with "41" (Mode 1 response)
+    parts = cleaned.split()
 
     if not parts or parts[0] != "41":
         return None
-    
-    pid = response.strip().split()[1]
+
+    if len(parts) < 2:
+        return None
+
+    pid = parts[1]
 
     if pid not in PID_DEFINITIONS:
         return None
     defn = PID_DEFINITIONS[pid]
 
-    #Convert the data bytes from hex strings to integers
+    if len(parts) < 2 + defn["bytes"]:
+        return None
+
+    # Convert the data bytes from hex strings to integers
     data_bytes = [int(b, 16) for b in parts[2:2 + defn["bytes"]]]
 
     value = defn["decode"](*data_bytes)

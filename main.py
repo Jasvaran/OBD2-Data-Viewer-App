@@ -10,8 +10,10 @@ from rich.live import Live
 from dashboard import build_table
 async def main():
 
-    simulation_on = True
-    delay = 0.2 if simulation_on else 3
+    simulation_on = False
+    init_delay = 0.2 if simulation_on else 1.0
+    poll_delay = 0.2 if simulation_on else 0.15
+    post_cycle_delay = 0.1 if simulation_on else 0.15
     device_dict = {}
     TX_UUID = None
     RX_UUID = None
@@ -24,17 +26,27 @@ async def main():
         print("Running in real mode. Using actual BleakClient.")
         devices = await BleakScanner.discover(5.0, return_adv=True)
 
-        for i, d in enumerate(devices):
-            device_dict[i] = devices[d][1].local_name
-        
-        pprint.pprint(device_dict)
-        
+        named_devices = []
+        for address, (_, adv_data) in devices.items():
+            local_name = adv_data.local_name if adv_data is not None else None
+            if local_name:
+                named_devices.append((address, local_name))
+
+        if not named_devices:
+            print("No named BLE devices were found. Try scanning again.")
+            return
+
+        for i, (address, local_name) in enumerate(named_devices):
+            device_dict[i] = {"address": address, "name": local_name}
+
+        pprint.pprint({i: device_dict[i]["name"] for i in device_dict})
+
         select = input("Enter the number corresponding to the device you want to connect to: ")
         try:
             select = int(select)
             if select in device_dict:
-                print(f"Selected device: {device_dict[select]}")
-                my_device = list(devices.keys())[select]
+                print(f"Selected device: {device_dict[select]['name']}")
+                my_device = device_dict[select]["address"]
             else:
                 print("Invalid selection. Exiting.")
                 return
@@ -63,20 +75,51 @@ async def main():
         print(f"RX_UUID: {RX_UUID}")
 
         # Notification handler function
+        rx_buffer = ""
+        ignored_tokens = {"OK", "SEARCHING...", "NO DATA", "?"}
+
         def notificaion_handler(sender, data):
-            # print(f"Notification from {sender}: {data.decode(errors='ignore')}")
-            text = data.decode(errors="ignore").strip()
-            if text == ">": # ELM327 prompt, 
+            # BLE notifications may arrive in partial chunks.
+            # Example chunk sequence:
+            #   chunk A: "41 0C 1A"
+            #   chunk B: " F8\r010D\r41 0D 28\r>"
+            # Combined buffer becomes:
+            #   "41 0C 1A F8\r010D\r41 0D 28\r>"
+            # Parsed lines:
+            #   - "41 0C 1A F8"  -> decoded PID response (RPM)
+            #   - "010D"         -> request echo, ignored
+            #   - "41 0D 28"     -> decoded PID response (speed)
+            nonlocal rx_buffer
+            rx_buffer += data.decode(errors="ignore")
+
+            if "\r" not in rx_buffer and "\n" not in rx_buffer and ">" not in rx_buffer:
                 return
-            result = decode_response(text)
 
-            
+            for sep in ("\r", "\n", ">"):
+                rx_buffer = rx_buffer.replace(sep, "\n")
 
-
-            if result is not None:
-                dashboard_dataDict[result['pid']] = result
+            lines = [line.strip() for line in rx_buffer.split("\n")]
+            if rx_buffer.endswith("\n"):
+                rx_buffer = ""
             else:
-                print(f"Received unrecognized response: \nRaw Response: {text}")
+                rx_buffer = lines.pop() if lines else ""
+
+            for text in lines:
+                if not text:
+                    continue
+
+                upper = text.upper()
+                compact = upper.replace(" ", "")
+                if upper in ignored_tokens or upper.startswith("AT") or upper.startswith("ELM327"):
+                    continue
+                if len(compact) == 4 and compact.startswith("01") and all(c in "0123456789ABCDEF" for c in compact):
+                    continue
+
+                result = decode_response(text)
+                if result is not None:
+                    dashboard_dataDict[result["pid"]] = result
+                else:
+                    print(f"Ignored non-PID line: {text}")
         
         # start notifications
         await client.start_notify(RX_UUID, notificaion_handler)
@@ -85,19 +128,19 @@ async def main():
         for cmd in init_commands:
             print(f"Sending initialization command: {cmd.strip()}")
             await client.write_gatt_char(TX_UUID, cmd.encode())
-            await asyncio.sleep(delay)  # wait for response 
+            await asyncio.sleep(init_delay)  # wait for response 
         
 
         try:
-            with Live(build_table(dashboard_dataDict), refresh_per_second=1) as live:
+            with Live(build_table(dashboard_dataDict), refresh_per_second=4) as live:
                 try:                
                     while True:
                         for pid_cmd in PID_LIST:
                             # print(f"Requesting PID: {pid_cmd}")
                             await client.write_gatt_char(TX_UUID, (pid_cmd + "\r").encode())
-                            await asyncio.sleep(delay)  # wait for response
+                            await asyncio.sleep(poll_delay)  # wait for response
                             live.update(build_table(dashboard_dataDict))
-                        await asyncio.sleep(0.3)
+                        await asyncio.sleep(post_cycle_delay)
                 except KeyboardInterrupt:
                     pass
         finally:
