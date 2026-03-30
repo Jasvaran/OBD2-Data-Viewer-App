@@ -89,6 +89,7 @@ async def main():
             #   - "41 0C 1A F8"  -> decoded PID response (RPM)
             #   - "010D"         -> request echo, ignored
             #   - "41 0D 28"     -> decoded PID response (speed)
+            
             nonlocal rx_buffer
             rx_buffer += data.decode(errors="ignore")
 
