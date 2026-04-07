@@ -70,6 +70,20 @@ Python packages used by the app:
 - `bleak`
 - `rich`
 
+This project now includes `uv` project metadata in [pyproject.toml](pyproject.toml) and a lockfile in [uv.lock](uv.lock).
+
+If you are using `uv`, install the project dependencies with:
+
+```bash
+uv sync
+```
+
+Then run the app with:
+
+```bash
+uv run python main.py
+```
+
 Install them with:
 
 ```bash
@@ -81,32 +95,61 @@ pip install bleak rich
 Start the app with:
 
 ```bash
-python main.py
+python3 -m uv run python main.py
 ```
 
-By default, the app is currently set to real BLE mode in [main.py](main.py).
+By default, the app runs in normal BLE mode and scans for nearby named devices.
+
+## CLI Options
+
+The app supports common runtime configuration through command-line flags:
+
+- `--simulate`: run with the built-in mock OBD/BLE simulator
+- `--debug`: enable verbose logging for discovery, characteristics, PID requests, and ignored adapter chatter
+- `--poll-delay <seconds>`: control the delay between PID requests
+- `--device-name "<name>"`: connect to the first BLE device whose advertised local name exactly matches the given value
+- `--device-address <address>`: connect directly to a BLE adapter by address
+- `--scan-timeout <seconds>`: control how long BLE discovery runs in real mode
+
+See the built-in help with:
+
+```bash
+python3 -m uv run python main.py --help
+```
 
 ### Real Adapter Mode
 
-In the current code:
+Run in normal BLE mode with interactive device selection:
 
-```python
-simulation_on = False
+```bash
+python3 -m uv run python main.py
 ```
 
-With that setting:
+Or target a specific adapter by name:
+
+```bash
+python3 -m uv run python main.py --device-name "OBDII"
+```
+
+Or connect directly by address:
+
+```bash
+python3 -m uv run python main.py --device-address "AA:BB:CC:DD:EE:FF"
+```
+
+In real adapter mode, the app:
 
 - the app scans for nearby BLE devices
 - shows named devices it finds
-- prompts you to choose one
+- prompts you to choose one if you did not provide `--device-name` or `--device-address`
 - connects using `BleakClient`
 
 ### Simulation Mode
 
-To run without hardware, change the flag in [main.py](main.py) to:
+To run without hardware:
 
-```python
-simulation_on = True
+```bash
+python3 -m uv run python main.py --simulate
 ```
 
 In simulation mode, the app:
@@ -118,11 +161,22 @@ In simulation mode, the app:
 
 ## Example Workflow
 
-1. Open [main.py](main.py).
-2. Set `simulation_on` to `True` if you want to test without hardware.
-3. Run `python main.py`.
-4. Watch the live table refresh with current PID values.
+1. Run `python3 -m uv run python main.py --simulate` to test without hardware.
+2. Run `python3 -m uv run python main.py` to use interactive BLE discovery.
+3. Optionally target an adapter with `python3 -m uv run python main.py --device-name "OBDII"`.
+4. Optionally slow polling with `python3 -m uv run python main.py --poll-delay 0.25`.
 5. Press `Ctrl+C` to stop the loop.
+
+## Example Commands
+
+```bash
+python3 -m uv run python main.py --simulate
+python3 -m uv run python main.py --debug
+python3 -m uv run python main.py --poll-delay 0.25
+python3 -m uv run python main.py --device-name "OBDII"
+python3 -m uv run python main.py --device-address "AA:BB:CC:DD:EE:FF"
+python3 -m uv run python main.py --scan-timeout 8
+```
 
 ## Adding Or Changing PIDs
 
@@ -151,9 +205,8 @@ If a PID is in the polling list but not in the decoder, it will not be displayed
 
 ## Notes And Limitations
 
-- There is no `requirements.txt` or `pyproject.toml` yet, so dependencies are not pinned.
+- There is no `requirements.txt` yet for non-`uv` installs.
 - The app currently chooses the first writable and first notify characteristic it sees. Some adapters may require more specific UUID selection logic.
-- `simulation_on` is a manual code toggle rather than a CLI argument or config setting.
 - Only a subset of Mode 01 PIDs is implemented.
 - The main interface is terminal-only; there is no GUI or web frontend yet.
 - File naming includes `intialization_commands.py`, which is intentionally referenced as-is in the code even though the word is misspelled.
@@ -183,8 +236,7 @@ Some adapters expose several characteristics. The current implementation uses a 
 
 ## Future Improvement Ideas
 
-- Add a `requirements.txt` or `pyproject.toml`
-- Add command-line flags for simulation mode and scan timeout
+- Add a `requirements.txt` for non-`uv` users
 - Add preferred UUID matching for known OBD-II adapters
 - Expand decoder support for more PIDs and Mode 09 data
 - Add logging and debug verbosity levels
