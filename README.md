@@ -40,8 +40,9 @@ These are configured in [PID_Resources/pid_list.py](PID_Resources/pid_list.py) a
 - [PID_Resources/pid_decoder.py](PID_Resources/pid_decoder.py): response parsing and PID-specific decode formulas
 - [dashboard/dashboardData.py](dashboard/dashboardData.py): dashboard data store and Rich table builder
 - [Bluetooth_testing.py](Bluetooth_testing.py): older BLE experimentation file kept for reference
-- [LIVE_DASHBOARD_PLAN.md](LIVE_DASHBOARD_PLAN.md): notes on the live dashboard implementation
-- [CONVERSATION_STUDY_NOTES.md](CONVERSATION_STUDY_NOTES.md): debugging notes about parsing noisy real adapter output
+- [docs/LIVE_DASHBOARD_PLAN.md](docs/LIVE_DASHBOARD_PLAN.md): notes on the live dashboard implementation
+- [docs/CONVERSATION_STUDY_NOTES.md](docs/CONVERSATION_STUDY_NOTES.md): debugging notes about parsing noisy real adapter output
+- [docs/resume-improvement-directions.md](docs/resume-improvement-directions.md): abstract portfolio-oriented improvement directions
 
 ## How It Works
 
