@@ -42,7 +42,7 @@ These are configured in [PID_Resources/pid_list.py](PID_Resources/pid_list.py) a
 - [Bluetooth_testing.py](Bluetooth_testing.py): older BLE experimentation file kept for reference
 - [docs/LIVE_DASHBOARD_PLAN.md](docs/LIVE_DASHBOARD_PLAN.md): notes on the live dashboard implementation
 - [docs/CONVERSATION_STUDY_NOTES.md](docs/CONVERSATION_STUDY_NOTES.md): debugging notes about parsing noisy real adapter output
-- [docs/resume-improvement-directions.md](docs/resume-improvement-directions.md): abstract portfolio-oriented improvement directions
+- [docs/project-improvement-directions.md](docs/project-improvement-directions.md): practical directions for expanding the project
 
 ## How It Works
 
