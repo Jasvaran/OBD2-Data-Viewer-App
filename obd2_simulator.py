@@ -80,10 +80,42 @@ def _pid_1F_runtime():
     b = secs & 0xFF
     return f"41 1F {a:02X} {b:02X}"
 
+def _pid_23_fuel_rail_pressure():
+    """Fuel rail gauge pressure (kPa)"""
+    pressure_kpa = random.randint(300, 16000)
+    raw = pressure_kpa // 10
+    a = raw >> 8
+    b = raw & 0xFF
+    return f"41 23 {a:02X} {b:02X}"
+
 def _pid_2F_fuel_level():
     """Fuel tank level input (0-100 %)"""
     val = random.randint(50, 230)
     return f"41 2F {val:02X}"
+
+def _pid_42_control_module_voltage():
+    """Control module voltage (V)"""
+    volts = random.uniform(12.0, 14.8)
+    raw = int(volts * 1000)
+    a = raw >> 8
+    b = raw & 0xFF
+    return f"41 42 {a:02X} {b:02X}"
+
+def _pid_43_absolute_load():
+    """Absolute load value (%)"""
+    load_percent = random.uniform(10.0, 120.0)
+    raw = int(load_percent * 255 / 100)
+    a = raw >> 8
+    b = raw & 0xFF
+    return f"41 43 {a:02X} {b:02X}"
+
+def _pid_44_commanded_equivalence_ratio():
+    """Commanded equivalence ratio"""
+    ratio = random.uniform(0.85, 1.15)
+    raw = int(ratio * 65536 / 2)
+    a = raw >> 8
+    b = raw & 0xFF
+    return f"41 44 {a:02X} {b:02X}"
 
 def _pid_46_ambient_temp():
     """Ambient air temperature"""
@@ -91,9 +123,35 @@ def _pid_46_ambient_temp():
     val = temp_c + 40
     return f"41 46 {val:02X}"
 
+def _pid_49_accelerator_pedal():
+    """Accelerator pedal position D (0-100 %)"""
+    pedal_percent = random.randint(0, 100)
+    val = int(pedal_percent * 255 / 100)
+    return f"41 49 {val:02X}"
+
 def _pid_51_fuel_type():
     """Fuel type — Gasoline"""
     return "41 51 01"
+
+def _pid_5C_engine_oil_temp():
+    """Engine oil temperature"""
+    temp_c = random.randint(75, 125)
+    val = temp_c + 40
+    return f"41 5C {val:02X}"
+
+def _pid_5D_fuel_injection_timing():
+    """Fuel injection timing"""
+    timing_degrees = random.uniform(-10.0, 20.0)
+    raw = int((timing_degrees + 210) * 128)
+    a = raw >> 8
+    b = raw & 0xFF
+    return f"41 5D {a:02X} {b:02X}"
+
+def _pid_61_driver_demand_torque():
+    """Driver demand engine torque (-125-130 %)"""
+    torque_percent = random.randint(-20, 100)
+    val = torque_percent + 125
+    return f"41 61 {val:02X}"
 
 def _pid_00_supported_pids_01_20():
     """Supported PIDs [01-20] — bitmask"""
@@ -101,11 +159,15 @@ def _pid_00_supported_pids_01_20():
 
 def _pid_20_supported_pids_21_40():
     """Supported PIDs [21-40]"""
-    return "41 20 80 05 A0 11"
+    return "41 20 20 02 00 01"
 
 def _pid_40_supported_pids_41_60():
     """Supported PIDs [41-60]"""
-    return "41 40 6C 10 00 00"
+    return "41 40 74 80 80 19"
+
+def _pid_60_supported_pids_61_80():
+    """Supported PIDs [61-80]"""
+    return "41 60 80 00 00 00"
 
 def _mode_09_02_vin():
     """Vehicle Identification Number"""
@@ -128,10 +190,19 @@ MODE_01 = {
     "011C": _pid_1C_obd_standard,
     "011F": _pid_1F_runtime,
     "0120": _pid_20_supported_pids_21_40,
+    "0123": _pid_23_fuel_rail_pressure,
     "012F": _pid_2F_fuel_level,
     "0140": _pid_40_supported_pids_41_60,
+    "0142": _pid_42_control_module_voltage,
+    "0143": _pid_43_absolute_load,
+    "0144": _pid_44_commanded_equivalence_ratio,
     "0146": _pid_46_ambient_temp,
+    "0149": _pid_49_accelerator_pedal,
     "0151": _pid_51_fuel_type,
+    "015C": _pid_5C_engine_oil_temp,
+    "015D": _pid_5D_fuel_injection_timing,
+    "0160": _pid_60_supported_pids_61_80,
+    "0161": _pid_61_driver_demand_torque,
 }
 
 MODE_09 = {

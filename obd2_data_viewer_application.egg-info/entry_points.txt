@@ -1,0 +1,2 @@
+[console_scripts]
+obd2-viewer = main:cli

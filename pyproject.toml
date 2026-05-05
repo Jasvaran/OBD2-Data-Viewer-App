@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "obd2-data-viewer-application"
 version = "0.1.0"
@@ -6,3 +10,12 @@ dependencies = [
     "bleak>=3.0.1",
     "rich>=14.3.3",
 ]
+
+[project.scripts]
+obd2-viewer = "main:cli"
+
+[tool.setuptools]
+py-modules = ["main", "obd2_simulator", "intialization_commands"]
+
+[tool.setuptools.packages.find]
+include = ["dashboard", "PID_Resources"]

@@ -11,35 +11,72 @@ The project also includes a built-in simulator so you can work on the polling, p
 - Send initialization commands such as `ATZ` and `ATE0`
 - Poll a set of Mode 01 OBD-II PIDs in a loop
 - Decode raw hex responses into human-readable values
+- Decode lookup-style values such as OBD compliance standard and fuel type
 - Display live results in a Rich-powered terminal dashboard
-- Run in simulation mode with a mock `BleakClient`
+- Run in simulation mode with a mock `BleakClient` that supports the same live PID set
 - Buffer and clean noisy adapter output such as `OK`, `SEARCHING...`, and echoed commands
 
 ## Current PIDs Displayed
 
 The default dashboard polls and displays:
 
-- Coolant Temperature
-- Engine RPM
-- Vehicle Speed
-- Engine Load
-- Intake Manifold Pressure
-- Intake Air Temperature
-- Throttle Position
-- Fuel Tank Level
-- Ambient Air Temperature
+- `0104`: Engine Load (`%`)
+- `0105`: Coolant Temperature (`°C`)
+- `010B`: Intake Manifold Pressure (`kPa`)
+- `010C`: Engine RPM (`rpm`)
+- `010D`: Vehicle Speed (`km/h`)
+- `010F`: Intake Air Temperature (`°C`)
+- `0110`: MAF Air Flow Rate (`g/s`)
+- `0111`: Throttle Position (`%`)
+- `011C`: OBD Standard
+- `011F`: Run Time Since Engine Start (`s`)
+- `0123`: Fuel Rail Gauge Pressure (`kPa`)
+- `012F`: Fuel Tank Level (`%`)
+- `0142`: Control Module Voltage (`V`)
+- `0143`: Absolute Load (`%`)
+- `0144`: Commanded Equivalence Ratio
+- `0146`: Ambient Air Temperature (`°C`)
+- `0149`: Accelerator Pedal Position D (`%`)
+- `0151`: Fuel Type
+- `015C`: Engine Oil Temperature (`°C`)
+- `015D`: Fuel Injection Timing (`°`)
+- `0161`: Driver Demand Engine Torque (`%`)
 
-These are configured in [PID_Resources/pid_list.py](PID_Resources/pid_list.py) and decoded in [PID_Resources/pid_decoder.py](PID_Resources/pid_decoder.py).
+These are configured in [PID_Resources/pid_list.py](../PID_Resources/pid_list.py) and decoded in [PID_Resources/pid_decoder.py](../PID_Resources/pid_decoder.py).
+
+## PID Decoder Functionality
+
+The decoder currently supports Mode 01 `41 xx ...` responses for all PIDs in the dashboard list. It:
+
+- extracts valid Mode 01 responses from noisy ELM327 text
+- ignores unsupported or incomplete responses by returning `None`
+- converts hex data bytes using PID-specific formulas
+- rounds floating-point values to two decimal places
+- maps OBD standard byte values to readable labels
+- maps fuel type byte values to readable labels
+
+String-valued PIDs such as OBD Standard and Fuel Type are displayed without numeric rounding.
+
+## Simulator PID Support
+
+Simulation mode responds to every PID in the default polling list with randomized, realistic-looking values. It also includes supported-PID bitmask responses for:
+
+- `0100`: supported PIDs `01-20`
+- `0120`: supported PIDs `21-40`
+- `0140`: supported PIDs `41-60`
+- `0160`: supported PIDs `61-80`
+
+The simulator also has a Mode 09 VIN response for `0902`, though the live dashboard currently polls only Mode 01 PIDs.
 
 ## Project Structure
 
-- [main.py](main.py): app entry point, BLE discovery, connection, polling loop, and live dashboard updates
-- [obd2_simulator.py](obd2_simulator.py): mock ELM327/BLE client for offline development
-- [intialization_commands.py](intialization_commands.py): startup commands sent to the adapter
-- [PID_Resources/pid_list.py](PID_Resources/pid_list.py): list of requested PIDs
-- [PID_Resources/pid_decoder.py](PID_Resources/pid_decoder.py): response parsing and PID-specific decode formulas
-- [dashboard/dashboardData.py](dashboard/dashboardData.py): dashboard data store and Rich table builder
-- [Bluetooth_testing.py](Bluetooth_testing.py): older BLE experimentation file kept for reference
+- [main.py](../main.py): app entry point, BLE discovery, connection, polling loop, and live dashboard updates
+- [obd2_simulator.py](../obd2_simulator.py): mock ELM327/BLE client for offline development
+- [intialization_commands.py](../intialization_commands.py): startup commands sent to the adapter
+- [PID_Resources/pid_list.py](../PID_Resources/pid_list.py): list of requested PIDs
+- [PID_Resources/pid_decoder.py](../PID_Resources/pid_decoder.py): response parsing and PID-specific decode formulas
+- [dashboard/dashboardData.py](../dashboard/dashboardData.py): dashboard data store and Rich table builder
+- [Bluetooth_testing.py](../Bluetooth_testing.py): older BLE experimentation file kept for reference
 - [LIVE_DASHBOARD_PLAN.md](LIVE_DASHBOARD_PLAN.md): notes on the live dashboard implementation
 - [CONVERSATION_STUDY_NOTES.md](CONVERSATION_STUDY_NOTES.md): debugging notes about parsing noisy real adapter output
 
@@ -70,24 +107,31 @@ Python packages used by the app:
 - `bleak`
 - `rich`
 
-This project now includes `uv` project metadata in [pyproject.toml](pyproject.toml) and a lockfile in [uv.lock](uv.lock).
+This project includes `uv` project metadata in [pyproject.toml](../pyproject.toml), a lockfile in [uv.lock](../uv.lock), and a console command named `obd2-viewer`.
 
-If you are using `uv`, install the project dependencies with:
+On macOS, install `uv` with Homebrew if the command is not already available:
+
+```bash
+brew install uv
+```
+
+Then install the project dependencies with:
 
 ```bash
 uv sync
 ```
 
-Then run the app with:
+Run the app with:
 
 ```bash
-uv run python main.py
+uv run obd2-viewer
 ```
 
-Install them with:
+If you are not using `uv`, create a virtual environment and install the dependencies with:
 
 ```bash
-pip install bleak rich
+python3 -m venv .venv
+.venv/bin/python -m pip install bleak rich
 ```
 
 ## Running The Project
@@ -95,7 +139,7 @@ pip install bleak rich
 Start the app with:
 
 ```bash
-python3 -m uv run python main.py
+uv run obd2-viewer
 ```
 
 By default, the app runs in normal BLE mode and scans for nearby named devices.
@@ -114,7 +158,7 @@ The app supports common runtime configuration through command-line flags:
 See the built-in help with:
 
 ```bash
-python3 -m uv run python main.py --help
+uv run obd2-viewer --help
 ```
 
 ### Real Adapter Mode
@@ -122,24 +166,24 @@ python3 -m uv run python main.py --help
 Run in normal BLE mode with interactive device selection:
 
 ```bash
-python3 -m uv run python main.py
+uv run obd2-viewer
 ```
 
 Or target a specific adapter by name:
 
 ```bash
-python3 -m uv run python main.py --device-name "OBDII"
+uv run obd2-viewer --device-name "OBDII"
 ```
 
 Or connect directly by address:
 
 ```bash
-python3 -m uv run python main.py --device-address "AA:BB:CC:DD:EE:FF"
+uv run obd2-viewer --device-address "AA:BB:CC:DD:EE:FF"
 ```
 
 In real adapter mode, the app:
 
-- the app scans for nearby BLE devices
+- scans for nearby BLE devices
 - shows named devices it finds
 - prompts you to choose one if you did not provide `--device-name` or `--device-address`
 - connects using `BleakClient`
@@ -149,7 +193,7 @@ In real adapter mode, the app:
 To run without hardware:
 
 ```bash
-python3 -m uv run python main.py --simulate
+uv run obd2-viewer --simulate
 ```
 
 In simulation mode, the app:
@@ -161,34 +205,37 @@ In simulation mode, the app:
 
 ## Example Workflow
 
-1. Run `python3 -m uv run python main.py --simulate` to test without hardware.
-2. Run `python3 -m uv run python main.py` to use interactive BLE discovery.
-3. Optionally target an adapter with `python3 -m uv run python main.py --device-name "OBDII"`.
-4. Optionally slow polling with `python3 -m uv run python main.py --poll-delay 0.25`.
-5. Press `Ctrl+C` to stop the loop.
+1. Run `uv sync` once to create the environment and install dependencies.
+2. Run `uv run obd2-viewer --simulate` to test without hardware.
+3. Run `uv run obd2-viewer` to use interactive BLE discovery.
+4. Optionally target an adapter with `uv run obd2-viewer --device-name "OBDII"`.
+5. Optionally slow polling with `uv run obd2-viewer --poll-delay 0.25`.
+6. Press `Ctrl+C` to stop the loop.
 
 ## Example Commands
 
 ```bash
-python3 -m uv run python main.py --simulate
-python3 -m uv run python main.py --debug
-python3 -m uv run python main.py --poll-delay 0.25
-python3 -m uv run python main.py --device-name "OBDII"
-python3 -m uv run python main.py --device-address "AA:BB:CC:DD:EE:FF"
-python3 -m uv run python main.py --scan-timeout 8
+uv run obd2-viewer --simulate
+uv run obd2-viewer --debug
+uv run obd2-viewer --poll-delay 0.25
+uv run obd2-viewer --device-name "OBDII"
+uv run obd2-viewer --device-address "AA:BB:CC:DD:EE:FF"
+uv run obd2-viewer --scan-timeout 8
 ```
 
 ## Adding Or Changing PIDs
 
 To add a new PID:
 
-1. Add the command to [PID_Resources/pid_list.py](PID_Resources/pid_list.py).
-2. Add a matching entry to `PID_DEFINITIONS` in [PID_Resources/pid_decoder.py](PID_Resources/pid_decoder.py).
+1. Add the command to [PID_Resources/pid_list.py](../PID_Resources/pid_list.py).
+2. Add a matching entry to `PID_DEFINITIONS` in [PID_Resources/pid_decoder.py](../PID_Resources/pid_decoder.py).
 3. Include:
    - `name`
    - `unit`
    - number of data `bytes`
    - a `decode` lambda or function
+
+For simulator parity, add a response generator and `MODE_01` entry in [obd2_simulator.py](../obd2_simulator.py) for the same command.
 
 Example shape:
 

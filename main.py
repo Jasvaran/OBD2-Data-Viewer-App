@@ -127,7 +127,6 @@ async def select_device(args: argparse.Namespace) -> str | None:
 
 
 async def main(args: argparse.Namespace):
-    from bleak import BleakClient
     from rich.live import Live
 
     from dashboard import build_table
@@ -144,6 +143,8 @@ async def main(args: argparse.Namespace):
         print("Running in simulation mode. Using MockBleakClient.")
         address = "SIMULATED"
     else:
+        from bleak import BleakClient
+
         address = await select_device(args)
         if address is None:
             return
@@ -252,9 +253,13 @@ async def main(args: argparse.Namespace):
 
    
 
-if __name__ == "__main__":
+def cli() -> None:
     try:
         cli_args = parse_args()
         asyncio.run(main(cli_args))
     except KeyboardInterrupt:
         print("\nStopped by user.")
+
+
+if __name__ == "__main__":
+    cli()
