@@ -25,6 +25,6 @@ def build_table(dashboard_dataDict):
             value_text = f"{data['value']} {data['unit']}".strip()
             table.add_row(data["pid"], data["name"], value_text)
         else:
-            table.add_row(pid, "N/A", "N/A")
+            table.add_row(pid, "Waiting...", "Waiting...")
 
     return table

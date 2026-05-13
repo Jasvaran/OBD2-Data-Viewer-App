@@ -22,7 +22,6 @@ The default dashboard polls and displays:
 
 - `0104`: Engine Load (`%`)
 - `0105`: Coolant Temperature (`°C`)
-- `010B`: Intake Manifold Pressure (`kPa`)
 - `010C`: Engine RPM (`rpm`)
 - `010D`: Vehicle Speed (`km/h`)
 - `010F`: Intake Air Temperature (`°C`)
@@ -30,7 +29,6 @@ The default dashboard polls and displays:
 - `0111`: Throttle Position (`%`)
 - `011C`: OBD Standard
 - `011F`: Run Time Since Engine Start (`s`)
-- `0123`: Fuel Rail Gauge Pressure (`kPa`)
 - `012F`: Fuel Tank Level (`%`)
 - `0142`: Control Module Voltage (`V`)
 - `0143`: Absolute Load (`%`)
@@ -38,9 +36,6 @@ The default dashboard polls and displays:
 - `0146`: Ambient Air Temperature (`°C`)
 - `0149`: Accelerator Pedal Position D (`%`)
 - `0151`: Fuel Type
-- `015C`: Engine Oil Temperature (`°C`)
-- `015D`: Fuel Injection Timing (`°`)
-- `0161`: Driver Demand Engine Torque (`%`)
 
 These are configured in [PID_Resources/pid_list.py](../PID_Resources/pid_list.py) and decoded in [PID_Resources/pid_decoder.py](../PID_Resources/pid_decoder.py).
 
@@ -150,10 +145,13 @@ The app supports common runtime configuration through command-line flags:
 
 - `--simulate`: run with the built-in mock OBD/BLE simulator
 - `--debug`: enable verbose logging for discovery, characteristics, PID requests, and ignored adapter chatter
-- `--poll-delay <seconds>`: control the delay between PID requests
+- `--poll-delay <seconds>`: control the minimum pause after each completed PID request
+- `--response-timeout <seconds>`: control how long the app waits for the adapter prompt after each command
 - `--device-name "<name>"`: connect to the first BLE device whose advertised local name exactly matches the given value
 - `--device-address <address>`: connect directly to a BLE adapter by address
 - `--scan-timeout <seconds>`: control how long BLE discovery runs in real mode
+- `--tx-uuid <uuid>`: override the BLE characteristic used for writes
+- `--rx-uuid <uuid>`: override the BLE characteristic used for notifications
 
 See the built-in help with:
 
@@ -253,7 +251,7 @@ If a PID is in the polling list but not in the decoder, it will not be displayed
 ## Notes And Limitations
 
 - There is no `requirements.txt` yet for non-`uv` installs.
-- The app currently chooses the first writable and first notify characteristic it sees. Some adapters may require more specific UUID selection logic.
+- The app uses common OBD/UART UUID heuristics for characteristic selection, but some adapters may still need explicit `--tx-uuid` and `--rx-uuid` values.
 - Only a subset of Mode 01 PIDs is implemented.
 - The main interface is terminal-only; there is no GUI or web frontend yet.
 - File naming includes `intialization_commands.py`, which is intentionally referenced as-is in the code even though the word is misspelled.
@@ -276,10 +274,11 @@ That is normal for real ELM327 traffic. The app already filters common non-PID c
 - The PID may not have returned a valid response yet
 - The adapter may not support that PID
 - The response may not match a decoder entry yet
+- Run with `--debug` to confirm whether raw `41...` PID responses are arriving
 
 ### The wrong BLE characteristic is selected
 
-Some adapters expose several characteristics. The current implementation uses a generic first-match strategy, so adapter-specific UUID handling may be needed.
+Some adapters expose several characteristics. Run with `--debug`, inspect the characteristic list, then retry with explicit `--tx-uuid` and `--rx-uuid` values if the selected pair is wrong.
 
 ## Future Improvement Ideas
 

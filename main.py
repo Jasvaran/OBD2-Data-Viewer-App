@@ -33,7 +33,13 @@ def parse_args() -> argparse.Namespace:
         "--poll-delay",
         type=positive_float,
         default=None,
-        help="seconds to wait after each PID request before sending the next one",
+        help="minimum seconds to pause after each completed PID request",
+    )
+    parser.add_argument(
+        "--response-timeout",
+        type=positive_float,
+        default=20.0,
+        help="seconds to wait for the adapter prompt after each command",
     )
     parser.add_argument(
         "--scan-timeout",
@@ -51,6 +57,14 @@ def parse_args() -> argparse.Namespace:
         "--device-address",
         help="connect directly to a BLE device by address without interactive selection",
     )
+    parser.add_argument(
+        "--tx-uuid",
+        help="override the BLE characteristic UUID used for writes",
+    )
+    parser.add_argument(
+        "--rx-uuid",
+        help="override the BLE characteristic UUID used for notifications",
+    )
 
     args = parser.parse_args()
 
@@ -63,6 +77,96 @@ def parse_args() -> argparse.Namespace:
 def debug_log(enabled: bool, message: str) -> None:
     if enabled:
         print(f"[debug] {message}")
+
+
+def _uuid_text(uuid: str) -> str:
+    return str(uuid).lower()
+
+
+def _score_write_char(char) -> int:
+    uuid = _uuid_text(char.uuid)
+    description = getattr(char, "description", "").lower()
+    score = 0
+
+    if uuid in {
+        "6e400002-b5a3-f393-e0a9-e50e24dcca9e",  # Nordic UART RX/write
+        "0000fff2-0000-1000-8000-00805f9b34fb",
+        "fff2",
+    }:
+        score += 100
+    if uuid in {
+        "0000ffe1-0000-1000-8000-00805f9b34fb",
+        "ffe1",
+    }:
+        score += 80
+    if "write" in getattr(char, "properties", []):
+        score += 20
+    if "write-without-response" in getattr(char, "properties", []):
+        score += 10
+    if any(word in description for word in ("uart", "serial", "obd", "elm")):
+        score += 5
+
+    return score
+
+
+def _score_notify_char(char) -> int:
+    uuid = _uuid_text(char.uuid)
+    description = getattr(char, "description", "").lower()
+    score = 0
+
+    if uuid in {
+        "6e400003-b5a3-f393-e0a9-e50e24dcca9e",  # Nordic UART TX/notify
+        "0000fff1-0000-1000-8000-00805f9b34fb",
+        "fff1",
+    }:
+        score += 100
+    if uuid in {
+        "0000ffe1-0000-1000-8000-00805f9b34fb",
+        "ffe1",
+    }:
+        score += 80
+    if "notify" in getattr(char, "properties", []):
+        score += 20
+    if "indicate" in getattr(char, "properties", []):
+        score += 10
+    if any(word in description for word in ("uart", "serial", "obd", "elm")):
+        score += 5
+
+    return score
+
+
+def select_characteristics(client, args: argparse.Namespace) -> tuple[str | None, str | None]:
+    write_candidates = []
+    notify_candidates = []
+
+    for service_index, service in enumerate(client.services):
+        for char in service.characteristics:
+            props = char.properties
+            if "write" in props or "write-without-response" in props:
+                write_candidates.append((service_index, char))
+            if "notify" in props or "indicate" in props:
+                notify_candidates.append((service_index, char))
+
+            debug_log(
+                args.debug,
+                f"Characteristic: {char.uuid}, Properties: {char.properties}, Description: {char.description}",
+            )
+
+    tx_uuid = args.tx_uuid
+    rx_uuid = args.rx_uuid
+
+    if tx_uuid is None and write_candidates:
+        _, tx_char = max(write_candidates, key=lambda item: _score_write_char(item[1]))
+        tx_uuid = tx_char.uuid
+
+    if rx_uuid is None and notify_candidates:
+        _, rx_char = max(notify_candidates, key=lambda item: _score_notify_char(item[1]))
+        rx_uuid = rx_char.uuid
+
+    if tx_uuid is not None and rx_uuid is not None:
+        return tx_uuid, rx_uuid
+
+    return None, None
 
 
 async def select_device(args: argparse.Namespace) -> str | None:
@@ -136,8 +240,6 @@ async def main(args: argparse.Namespace):
     init_delay = 0.2 if simulation_on else 1.0
     poll_delay = args.poll_delay if args.poll_delay is not None else (0.2 if simulation_on else 0.15)
     post_cycle_delay = 0.1 if simulation_on else 0.15
-    tx_uuid = None
-    rx_uuid = None
 
     if simulation_on:
         print("Running in simulation mode. Using MockBleakClient.")
@@ -155,17 +257,7 @@ async def main(args: argparse.Namespace):
     async with ClientClass(address) as client:
         print(f"Connected to {address}")
 
-        for service in client.services:
-            for char in service.characteristics:
-                props = char.properties
-                if ("write" in props or "write-without-response" in props) and tx_uuid is None:
-                    tx_uuid = char.uuid
-                if ("notify" in props or "indicate" in props) and rx_uuid is None:
-                    rx_uuid = char.uuid
-                debug_log(
-                    args.debug,
-                    f"Characteristic: {char.uuid}, Properties: {char.properties}, Description: {char.description}",
-                )
+        tx_uuid, rx_uuid = select_characteristics(client, args)
 
         if tx_uuid is None or rx_uuid is None:
             print("Could not determine TX/RX BLE characteristics for the selected device.")
@@ -175,8 +267,9 @@ async def main(args: argparse.Namespace):
         debug_log(args.debug, f"RX_UUID: {rx_uuid}")
 
         # Notification handler function
+        prompt_received = asyncio.Event()
         rx_buffer = ""
-        ignored_tokens = {"OK", "SEARCHING...", "NO DATA", "?"}
+        ignored_tokens = {"OK", "SEARCHING...", "NO DATA", "STOPPED", "?"}
 
         def notificaion_handler(sender, data):
             # BLE notifications may arrive in partial chunks.
@@ -191,7 +284,11 @@ async def main(args: argparse.Namespace):
             #   - "41 0D 28"     -> decoded PID response (speed)
             
             nonlocal rx_buffer
-            rx_buffer += data.decode(errors="ignore")
+            chunk = data.decode(errors="ignore")
+            debug_log(args.debug, f"RX raw from {sender}: {chunk!r}")
+            rx_buffer += chunk
+            if ">" in rx_buffer:
+                prompt_received.set()
 
             if "\r" not in rx_buffer and "\n" not in rx_buffer and ">" not in rx_buffer:
                 return
@@ -219,6 +316,7 @@ async def main(args: argparse.Namespace):
                 result = decode_response(text)
                 if result is not None:
                     dashboard_dataDict[result["pid"]] = result
+                    debug_log(args.debug, f"Decoded PID {result['pid']}: {result['value']} {result['unit']}".strip())
                 else:
                     debug_log(args.debug, f"Ignored non-PID line: {text}")
         
@@ -227,9 +325,14 @@ async def main(args: argparse.Namespace):
         
         # Send innitalization command
         for cmd in init_commands:
+            prompt_received.clear()
             debug_log(args.debug, f"Sending initialization command: {cmd.strip()}")
             await client.write_gatt_char(tx_uuid, cmd.encode())
-            await asyncio.sleep(init_delay)  # wait for response 
+            try:
+                await asyncio.wait_for(prompt_received.wait(), timeout=args.response_timeout)
+            except asyncio.TimeoutError:
+                debug_log(args.debug, f"Timed out waiting for prompt after initialization command: {cmd.strip()}")
+            await asyncio.sleep(init_delay)
         
 
         try:
@@ -237,9 +340,14 @@ async def main(args: argparse.Namespace):
                 try:                
                     while True:
                         for pid_cmd in PID_LIST:
+                            prompt_received.clear()
                             debug_log(args.debug, f"Requesting PID: {pid_cmd}")
                             await client.write_gatt_char(tx_uuid, (pid_cmd + "\r").encode())
-                            await asyncio.sleep(poll_delay)  # wait for response
+                            try:
+                                await asyncio.wait_for(prompt_received.wait(), timeout=args.response_timeout)
+                            except asyncio.TimeoutError:
+                                debug_log(args.debug, f"Timed out waiting for prompt after PID: {pid_cmd}")
+                            await asyncio.sleep(poll_delay)
                             live.update(build_table(dashboard_dataDict))
                         await asyncio.sleep(post_cycle_delay)
                 except KeyboardInterrupt:

@@ -190,38 +190,54 @@ PID_DEFINITIONS = {
     },
 }
 
-def decode_response(response:str) -> dict | None:
+def _hex_bytes_from_response(response: str) -> list[str]:
+    chunks = re.findall(r"[0-9A-F]+", response.upper())
+    bytes_found = []
+
+    for chunk in chunks:
+        if len(chunk) == 2:
+            bytes_found.append(chunk)
+        elif len(chunk) > 2 and len(chunk) % 2 == 0:
+            bytes_found.extend(chunk[i:i + 2] for i in range(0, len(chunk), 2))
+        elif len(chunk) > 2:
+            mode_start = chunk.find("41")
+            if mode_start != -1 and (len(chunk) - mode_start) % 2 == 0:
+                bytes_found.extend(
+                    chunk[i:i + 2] for i in range(mode_start, len(chunk), 2)
+                )
+
+    return bytes_found
+
+
+def decode_response(response: str) -> dict | None:
     """
     Parse an ELM327 response like "41 05 6E" into a readable result.
     Returns a dict like: {"pid": "05", "name": "Coolant Temperature", "value": 70, "unit": "°C"}
     Returns None if the response can't be parsed.
     """
 
-    cleaned = response.strip().upper()
-    match = re.search(r"\b41\s+[0-9A-F]{2}(?:\s+[0-9A-F]{2}){1,4}\b", cleaned)
-    if match:
-        cleaned = match.group(0)
+    parts = _hex_bytes_from_response(response)
 
-    # Must start with "41" (Mode 1 response)
-    parts = cleaned.split()
-
-    if not parts or parts[0] != "41":
+    try:
+        mode_index = parts.index("41")
+    except ValueError:
         return None
 
-    if len(parts) < 2:
+    if len(parts) <= mode_index + 1:
         return None
 
-    pid = parts[1]
+    pid = parts[mode_index + 1]
 
     if pid not in PID_DEFINITIONS:
         return None
     defn = PID_DEFINITIONS[pid]
 
-    if len(parts) < 2 + defn["bytes"]:
+    data_start = mode_index + 2
+    if len(parts) < data_start + defn["bytes"]:
         return None
 
     # Convert the data bytes from hex strings to integers
-    data_bytes = [int(b, 16) for b in parts[2:2 + defn["bytes"]]]
+    data_bytes = [int(b, 16) for b in parts[data_start:data_start + defn["bytes"]]]
 
     value = defn["decode"](*data_bytes)
     if isinstance(value, float):
